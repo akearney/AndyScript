@@ -1,0 +1,232 @@
+#!/bin/bash -e
+#
+# Andy script
+#
+# contributions welcome
+#
+
+if [ $# -lt 1 ]; then
+  echo -e "\nusage: andy [somethings]"
+  echo
+  echo -e "\t--add-experiment name bucket start end\n\t\tadd a very simple experiment to the config file"
+  echo -e "\t-b --branch [name|optional]\n\t\tshows branches or creates a branch and creates a note"
+  echo -e "\t-c --checkout [name] [-b optional]\n\t\tcheckout a branch with name\n\t\tadd -b to create the branch if it doesn't exist"
+  echo -e "\t-e --edit-note \n\t\tedit the note for the current branch"
+  echo -e "\t-e --experiments \n\t\tcat the current experiment configs"
+  echo -e "\t-d --delete [name] \n\t\tremoves a branch and deletes the note\n\t\tname is optional and will default to delete the current branch"
+  echo -e "\t-D [name] \n\t\tremoves a branch and deletes the note\n\t\t Forces the delete"
+  echo -e "\t--delete-publish [name]\n\t\tpushes a removed branch to the origin"
+  echo -e "\tdiff \n\t\twrapper around arc diff to add a review comment to a note"
+  echo -e "\t-l --land \n\t\tuses arc land but also cleans up your note"
+  echo -e "\t--mysql \n\t\topen up the mysql terminal for jupiter"
+  echo -e "\t-n --note \n\t\tdisplays the current branches note"
+  echo -e "\t--pull [name] \n\t\tpull a branch that someone has pushed"
+  echo -e "\t--push \n\t\ttakes the current branch and pushes it so others can get it"
+  echo -e "\t--server \n\t\tshows the current user their server setup"
+  echo -e "\t--picture [file] [seconds] \n\t\tsaves a screen cap to file after n seconds"
+  echo -e "\tstash [pop] \n\t\twrapper around stash to add stash notes"
+  echo -e "\t--test-local [test] \n\t\trun a selenium test locally"
+  echo -e "\t--titan-pull \n\t\tupdate /src/dev on titan"
+  echo -e "\t--use-beta [stop]\n\t\tUse the beta servers (nice when titan search is down.\n\t\t Stop to reset"
+  echo -e "\t--windows [vm#] [resolution] \n\t\topen up a windows vm. Try not to kick anyone else off a vm.\n\t\t To see windows machine status ssh -X r77@jupiter then run virt-manager"
+  echo
+  exit 1
+fi
+case $1 in
+  "--branch")
+  ;&
+  "-b" )
+    if [[("$#" == 1)]]; then
+      git branch
+    fi
+    if [[("$#" == 2)]]; then
+      mkdir notes || true
+      git branch $2
+      BRANCH=$(git rev-parse --abbrev-ref HEAD)
+      ROOT=$(git rev-parse --show-toplevel )
+      git checkout $2
+      echo -e "Make a note here." >> $ROOT/notes/note_$2
+      date >> $ROOT/notes/note_$2
+      git checkout $BRANCH
+    fi
+  ;;
+  "--checkout")
+  ;&
+  "-c" )
+    if [[("$#" > 1)]]; then
+      git checkout $3 $2
+      ROOT=$(git rev-parse --show-toplevel )
+      NOTE=$ROOT/notes/note_$2
+      if [ -f $NOTE ]; then
+        cat $NOTE
+      else
+        echo -e "Make a note here." >> $ROOT/notes/note_$2
+        $EDITOR $NOTE
+        date >> $ROOT/notes/note_$2
+      fi
+    fi
+  ;;
+  "--delete")
+  ;&
+  "-d" )
+    if [[("$#" == 1)]]; then
+      BRANCH=$(git rev-parse --abbrev-ref HEAD)
+      git checkout master
+    fi
+    if [[("$#" == 2)]]; then
+      BRANCH=$2
+    fi
+    git branch -d $BRANCH
+    ROOT=$(git rev-parse --show-toplevel )
+    rm $ROOT/notes/note_$BRANCH
+    echo "you may wish to run andy --delete-publish ${BRANCH} if it's a public branch"
+  ;;
+  "-D" )
+    if [[("$#" == 2)]]; then
+      BRANCH=$2
+      ROOT=$(git rev-parse --show-toplevel )
+      git branch -D $BRANCH
+      rm $ROOT/notes/note_$BRANCH
+      echo "you may wish to run andy --delete-publish ${BRANCH} if it's a public branch"
+    fi
+  ;;
+  "--delete-publish")
+    if [[("$#" == 2)]]; then
+      git push origin :$2
+    fi
+  ;;
+  "--edit-note")
+  ;&
+  "-e" )
+    BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    ROOT=$(git rev-parse --show-toplevel )
+    sed -i '$ d' $ROOT/notes/note_$BRANCH
+    $EDITOR $ROOT/notes/note_$BRANCH
+    date >> $ROOT/notes/note_$BRANCH
+  ;;
+  "--land")
+  ;&
+  "-l" )
+    BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    ROOT=$(git rev-parse --show-toplevel )
+    arc land
+    rm $ROOT/notes/note_$BRANCH || true
+  ;;
+  "--note")
+  ;&
+  "-n" )
+    if [[("$#" == 1)]]; then
+      BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    fi
+    if [[("$#" == 2)]]; then
+      BRANCH=$2
+    fi
+    ROOT=$(git rev-parse --show-toplevel )
+    if [ -f $ROOT/notes/note_$BRANCH ]; then
+      cat $ROOT/notes/note_$BRANCH
+    else
+      echo -e "Make a note here." >> $ROOT/notes/note_$BRANCH
+      $EDITOR $ROOT/notes/note_$BRANCH
+    fi
+  ;;
+  "--pull")
+    if [[("$#" == 2)]]; then
+      git fetch origin
+      git checkout --track origin/$2
+    else
+      git pull
+    fi
+  ;;
+  "--push")
+    BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    git push -u origin $BRANCH
+  ;;
+  "diff")
+    arc diff
+    BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    ROOT=$(git rev-parse --show-toplevel )
+    sed -i '$ d' $ROOT/notes/note_$BRANCH
+    echo "Submitted for review" >> $ROOT/notes/note_$BRANCH
+    date >> $ROOT/notes/note_$BRANCH
+  ;;
+  "--server")
+    cat "/etc/apache2/conf-available/servers.conf"
+  ;;
+  "stash")
+    BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    ROOT=$(git rev-parse --show-toplevel )
+    if [[("$#" == 1)]]; then
+      git stash
+      sed -i '$ d' $ROOT/notes/note_$BRANCH
+      echo "Remember to git stash pop" >> $ROOT/notes/note_$BRANCH
+      date >> $ROOT/notes/note_$BRANCH
+    fi
+    if [[($2 == "pop")]]; then
+      git stash pop
+      sed -i '$ d' $ROOT/notes/note_$BRANCH
+      sed -i '$ d' $ROOT/notes/note_$BRANCH
+      date >> $ROOT/notes/note_$BRANCH
+    fi
+  ;;
+  "--titan-pull")
+    ssh -t r77@titan "cd ~/src/dev && git pull && exit"
+  ;;
+  "--mysql")
+    mysql --host=jupiter --user=r77 --password=mooncake --database=r77
+  ;;
+  "--picture")
+    if [[("$#" == 3)]]; then
+      sleep $3\s;
+    fi
+    import -window root $2
+  ;;
+  "--windows")
+    sudo apt-get install rdesktop
+    if [[("$#" == 1)]]; then
+      rdesktop -u room77 -g 1280x1024 windows1
+    fi
+    if [[("$#" == 2)]]; then
+      rdesktop -u room77 -g 1280x1024 windows$2
+    fi
+    if [[("$#" == 3)]]; then
+      rdesktop -u room77 -g $3 windows$2
+    fi
+  ;;
+  "--use-beta")
+    if [[("$2" == "stop")]]; then
+      sudo cp ~/servers.conf.bak /etc/apache2/conf-available/servers.conf
+    else
+      cp /etc/apache2/conf-available/servers.conf ~/servers.conf.bak
+      sudo sed -i '2 s/^.*$/Use R77Proxy staging-apache01.us-east-1b.prod.room77.com/g' /etc/apache2/conf-available/servers.conf
+      sudo sed -i '3,1000d' /etc/apache2/conf-available/servers.conf
+    fi
+    sudo apache2ctl restart
+  ;;
+  "--add-experiment")
+    if [[("$#" == 5)]]; then
+      HOMEDIR=$(git rev-parse --show-toplevel )
+      EXPDIR=$HOMEDIR"/static_data/push/auto/experiments/config"
+      cd $EXPDIR
+      echo $2",default,"$3 >> ctrl_exps
+      echo $2",exp,"$4","$5 >> exps
+      cd $HOMEDIR
+    fi
+  ;;
+  "--experiments")
+    HOMEDIR=$(git rev-parse --show-toplevel )
+    EXPDIR=$HOMEDIR"/static_data/push/auto/experiments/config"
+    cat $EXPDIR"/ctrl_exps"
+    cat $EXPDIR"/exps"
+  ;;
+  "--test-local")
+    HOMEDIR=$(git rev-parse --show-toplevel )
+    if [[("$#" == 2)]]; then
+      cd $HOMEDIR
+      MACHINE=$(hostname)
+      $2 --selenium_run_locally --selenium_domain $MACHINE'.corp.room77.com'
+    fi
+  ;;
+  * )
+  echo -e "Not a valid andy input"
+  ;;
+esac
